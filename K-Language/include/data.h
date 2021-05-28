@@ -2,6 +2,8 @@
 
 #include "common.h"
 
+namespace k::data { class Value; }
+
 namespace k::mem
 {
 	class Heap;
@@ -9,7 +11,7 @@ namespace k::mem
 	class MemoryBlock
 	{
 	private:
-		Heap* _owner = nullptr;
+		Heap* _owner;
 		MemoryBlock* _next;
 		MemoryBlock* _prev;
 		std::uintmax_t _refs;
@@ -29,6 +31,7 @@ namespace k::mem
 		void dec_ref();
 
 		friend class Heap;
+		friend class data::Value;
 
 	protected:
 
@@ -189,7 +192,7 @@ namespace k::data
 			_type = right ? DataType::Boolean : DataType::Undefined;
 			_data.string = right;
 			if (right)
-				right->inc_ref();
+				_data._block->inc_ref();
 			return *this;
 		}
 		inline Value& operator= (String& right) { return *this = &right; }
@@ -202,7 +205,7 @@ namespace k::data
 			_type = right ? DataType::Array : DataType::Undefined;
 			_data.array = right;
 			if (right)
-				right->inc_ref();
+				_data._block->inc_ref();
 			return *this;
 		}
 		inline Value& operator= (Array& right) { return *this = &right; }
@@ -215,7 +218,7 @@ namespace k::data
 			_type = right ? DataType::Object : DataType::Undefined;
 			_data.object = right;
 			if (right)
-				right->inc_ref();
+				_data._block->inc_ref();
 			return *this;
 		}
 		inline Value& operator= (Object& right) { return *this = &right; }
@@ -228,7 +231,7 @@ namespace k::data
 			_type = right ? DataType::Function : DataType::Undefined;
 			_data.function = right;
 			if (right)
-				right->inc_ref();
+				_data._block->inc_ref();
 			return *this;
 		}
 		inline Value& operator= (Function& right) { return *this = &right; }
@@ -241,7 +244,7 @@ namespace k::data
 			_type = right ? DataType::Iterator : DataType::Undefined;
 			_data.iterator = right;
 			if (right)
-				right->inc_ref();
+				_data._block->inc_ref();
 			return *this;
 		}
 		inline Value& operator= (Iterator& right) { return *this = &right; }
@@ -254,7 +257,7 @@ namespace k::data
 			_type = right ? DataType::Userdata : DataType::Undefined;
 			_data.userdata = right;
 			if (right)
-				right->inc_ref();
+				_data._block->inc_ref();
 			return *this;
 		}
 		inline Value& operator= (Userdata& right) { return *this = &right; }
@@ -287,7 +290,34 @@ namespace k::data
 		}
 
 	public:
-		Value clone();
+		inline mem::Heap* heap() const
+		{
+			return isScalarDataType(_type) ? nullptr : _data._block->_owner;
+		}
+
+		inline DataType type() const { return _type; }
+
+		inline Integer integer() const { return _data.integer; }
+		inline Real real() const { return _data.real; }
+		inline Boolean boolean() const { return _data.boolean; }
+		
+		inline String& string() { return *_data.string; }
+		inline const String& string() const { return *_data.string; }
+
+		inline Array& array() { return *_data.array; }
+		inline const Array& array() const { return *_data.array; }
+
+		inline Object& object() { return *_data.object; }
+		inline const Object& object() const { return *_data.object; }
+
+		inline Function& function() { return *_data.function; }
+		inline const Function& function() const { return *_data.function; }
+
+		inline Iterator& iterator() { return *_data.iterator; }
+		inline const Iterator& iterator() const { return *_data.iterator; }
+
+		inline Userdata& userdata() { return *_data.userdata; }
+		inline const Userdata& userdata() const { return *_data.userdata; }
 	};
 
 	
@@ -298,22 +328,19 @@ namespace k::data
 		String() = default;
 		virtual ~String() = default;
 
-		String(const String&) = default;
-		String& operator= (const String&) = default;
+		String(const String&) = delete;
+		String& operator= (const String&) = delete;
 
 	public:
 		inline String(const char* str) :
-			MemoryBlock(),
 			std::string(str)
 		{}
 
 		inline String(const char* str, Size size) :
-			MemoryBlock(),
 			std::string(str, size)
 		{}
 
 		inline String(const std::string& str) :
-			MemoryBlock(),
 			std::string(str)
 		{}
 	};
@@ -331,11 +358,8 @@ namespace k::data
 		Array() = default;
 		virtual ~Array() = default;
 
-		Array(const Array&) = default;
-		Array& operator= (const Array&) = default;
-
-		Array(Array&&) noexcept = default;
-		Array& operator= (Array&&) noexcept = default;
+		Array(const Array&) = delete;
+		Array& operator= (const Array&) = delete;
 
 	public:
 		Array(Value* array, Size len);
@@ -410,18 +434,6 @@ namespace k::data
 			_data.array->inc_ref();
 	}
 
-	inline Value::Value(List* data) : _type{ data ? DataType::List : DataType::Undefined }, _data{ .list = data }
-	{
-		if (_data.list)
-			_data.list->inc_ref();
-	}
-
-	inline Value::Value(Struct* data) : _type{ data ? DataType::Struct : DataType::Undefined }, _data{ .structure = data }
-	{
-		if (_data.structure)
-			_data.structure->inc_ref();
-	}
-
 	inline Value::Value(Object* data) : _type{ data ? DataType::Object : DataType::Undefined }, _data{ .object = data }
 	{
 		if (_data.object)
@@ -484,16 +496,23 @@ namespace k::mem
 		inline data::Value create_string() { return create_and_construct<data::String>(); }
 		data::Value create_string(const char* str) { return create_and_construct<data::String>(str); }
 		data::Value create_string(const std::string& str) { return create_and_construct<data::String>(str); }
+
+		inline data::Value create_array() { return create_and_construct<data::Array>(); }
+		inline data::Value create_array(Size len) { return create_and_construct<data::Array>(len); }
+		inline data::Value create_array(Size len, const data::Value& default_value) { return create_and_construct<data::Array>(len, default_value); }
+		inline data::Value create_array(data::Value* array, Size len) { return create_and_construct<data::Array>(array, len); }
+		inline data::Value create_array(const std::vector<data::Value>& vector) { return create_and_construct<data::Array>(vector); }
+		inline data::Value create_array(std::vector<data::Value>&& vector) { return create_and_construct<data::Array>(std::move(vector)); }
+		inline data::Value create_array(std::initializer_list<data::Value> args) { return create_and_construct<data::Array>(args); }
 	};
 
 
 	inline void MemoryBlock::dec_ref()
 	{
 		if (_refs > 0)
-		{
 			--_refs;
-			if(_owner)
-				_owner->deallocate(this);
-		}
+		
+		if(_refs == 0 && _owner)
+			_owner->deallocate(this);
 	}
 }

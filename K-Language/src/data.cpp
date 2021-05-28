@@ -4,31 +4,8 @@ namespace k::data
 {
 	using mem::MemoryBlock;
 
-	Value Value::clone()
-	{
-		switch (_type)
-		{
-			case DataType::Undefined:
-				return Value();
-
-			case DataType::Integer:
-				return Value(_data.integer);
-
-			case DataType::Real:
-				return Value(_data.real);
-
-			case DataType::Boolean:
-				return Value(_data.boolean);
-
-			case DataType::String:
-				
-		}
-	}
-
-
 
 	Array::Array(Value* array, Size len) :
-		MemoryBlock(),
 		_array(len)
 	{
 		for (Value* ptr = _array.data(); len > 0; --len, ++ptr, ++array)
@@ -36,27 +13,22 @@ namespace k::data
 	}
 
 	Array::Array(const std::vector<Value>& vector) :
-		MemoryBlock(),
 		_array(vector)
 	{}
 
 	Array::Array(std::vector<Value>&& vector) noexcept :
-		MemoryBlock(),
 		_array(std::move(vector))
 	{}
 
 	Array::Array(std::initializer_list<Value> args) :
-		MemoryBlock(),
 		_array(args)
 	{}
 
 	Array::Array(Size length, const Value& default_value) :
-		MemoryBlock(),
 		_array(length, default_value)
 	{}
 
 	Array::Array(Size length) :
-		MemoryBlock(),
 		_array(length)
 	{}
 }
