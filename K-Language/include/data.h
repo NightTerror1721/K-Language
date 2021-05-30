@@ -412,7 +412,49 @@ namespace k::data
 		inline const_iterator cend() const { return _array.cend(); }
 	};
 
-	class Object : public mem::MemoryBlock {};
+	class Object : public mem::MemoryBlock
+	{
+	public:
+		class Property
+		{
+		private:
+			bool _const = false;
+			Value _value;
+
+		public:
+			inline Property(const Value& value, bool is_const = false) :
+				_const{ is_const },
+				_value{ value }
+			{}
+			inline Property(Value&& value, bool is_const = false) :
+				_const{ is_const },
+				_value{ std::move(value) }
+			{}
+
+			Property() = default;
+
+			Property(const Property&) = default;
+			Property& operator= (const Property&) noexcept = default;
+
+			~Property() = default;
+
+			Property(Property&&) noexcept = delete;
+			Property& operator= (Property&&) noexcept = delete;
+
+		public:
+			inline bool isConst() const { return _const; }
+
+			inline Value& value() { return _value; }
+			inline const Value& value() const { return _value; }
+
+			inline Value& operator* () { return _value; }
+			inline const Value& operator* () const { return _value; }
+		};
+
+	private:
+		std::unordered_map<std::string, Property> _props;
+	};
+
 	class Function : public mem::MemoryBlock {};
 	class Iterator : public mem::MemoryBlock {};
 	class Userdata : public mem::MemoryBlock {};
