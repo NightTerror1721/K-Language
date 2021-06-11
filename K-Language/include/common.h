@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 #include <type_traits>
+#include <exception>
 #include <iostream>
 #include <concepts>
 #include <utility>
@@ -82,4 +83,14 @@ namespace k::utils
 			else return std::max(std::min(static_cast<_ValueTy>(max), value), static_cast<_ValueTy>(min));
 		}
 	}
+}
+
+namespace k::error
+{
+	class RuntimeError : public std::exception
+	{
+	public:
+		inline RuntimeError(const char* msg) noexcept : exception(msg) {}
+		inline RuntimeError(const std::string& msg) noexcept : exception(msg.c_str()) {}
+	};
 }

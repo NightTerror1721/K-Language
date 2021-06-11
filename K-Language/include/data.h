@@ -451,8 +451,52 @@ namespace k::data
 			inline const Value& operator* () const { return _value; }
 		};
 
+		enum class ConstructType { Parent, Class };
+
 	private:
 		std::unordered_map<std::string, Property> _props;
+		Value _parent;
+		Value _class;
+
+	public:
+		using iterator = decltype(_props)::iterator;
+		using const_iterator = decltype(_props)::const_iterator;
+
+	public:
+		Object() = default;
+		~Object() = default;
+
+		Object(const Object&) = delete;
+		Object& operator= (const Object&) = default;
+
+	public:
+		Object(const Value& value, ConstructType type);
+		Object(const std::unordered_map<std::string, Property>& props, const Value& value, ConstructType type);
+		Object(const std::unordered_map<std::string, Property>& props);
+
+		Property* getProperty(const std::string& name);
+		const Property* getProperty(const std::string& name) const;
+
+		bool insert(const std::string& name, const Value& value, bool isConst = false);
+
+	public:
+		inline bool empty() const { return _props.empty(); }
+		inline Size size() const { return _props.size(); }
+
+	public:
+		inline operator bool() const { return !_props.empty(); }
+		inline bool operator! () const { return _props.empty(); }
+
+		inline Value& operator[] (const std::string& name) { return *_props.at(name); }
+		inline const Value& operator[] (const std::string& name) const { return *_props.at(name); }
+
+	public:
+		inline iterator begin() { return _props.begin(); }
+		inline const_iterator begin() const { return _props.begin(); }
+		inline const_iterator cbegin() const { return _props.cbegin(); }
+		inline iterator end() { return _props.end(); }
+		inline const_iterator end() const { return _props.end(); }
+		inline const_iterator cend() const { return _props.cend(); }
 	};
 
 	class Function : public mem::MemoryBlock {};

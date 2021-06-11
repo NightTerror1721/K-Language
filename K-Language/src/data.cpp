@@ -31,6 +31,50 @@ namespace k::data
 	Array::Array(Size length) :
 		_array(length)
 	{}
+
+
+
+	Object::Object(const Value& value, ConstructType type) :
+		_props(),
+		_parent(type == ConstructType::Parent ? value : nullptr),
+		_class(type == ConstructType::Class ? value : nullptr)
+	{}
+	Object::Object(const std::unordered_map<std::string, Property>& props, const Value& value, ConstructType type) :
+		_props(props),
+		_parent(type == ConstructType::Parent ? value : nullptr),
+		_class(type == ConstructType::Class ? value : nullptr)
+	{}
+	Object::Object(const std::unordered_map<std::string, Property>& props) :
+		_props(props),
+		_parent(),
+		_class()
+	{}
+
+	Object::Property* Object::getProperty(const std::string& name)
+	{
+		const auto& it = _props.find(name);
+		if (it == _props.end())
+			return nullptr;
+		return &it->second;
+	}
+	const Object::Property* Object::getProperty(const std::string& name) const
+	{
+		const auto& it = _props.find(name);
+		if (it == _props.end())
+			return nullptr;
+		return &it->second;
+	}
+
+	bool Object::insert(const std::string& name, const Value& value, bool isConst)
+	{
+		auto result = _props.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(name),
+			std::forward_as_tuple(value, isConst)
+		);
+
+		return result.second;
+	}
 }
 
 namespace k::mem
