@@ -2,6 +2,17 @@
 
 #include "common.h"
 
+namespace k
+{
+	class Chunk;
+	class Callable;
+}
+
+namespace k::runtime
+{
+	class RuntimeState;
+}
+
 namespace k::data { class Value; }
 
 namespace k::mem
@@ -11,10 +22,10 @@ namespace k::mem
 	class MemoryBlock
 	{
 	private:
-		Heap* _owner;
-		MemoryBlock* _next;
-		MemoryBlock* _prev;
-		std::uintmax_t _refs;
+		Heap* _owner = nullptr;
+		MemoryBlock* _next = nullptr;
+		MemoryBlock* _prev = nullptr;
+		std::uintmax_t _refs = 0;
 
 	public:
 		#pragma warning(push)
@@ -54,8 +65,6 @@ namespace k::data
 
 		Function,
 
-		Iterator,
-
 		Userdata
 	};
 
@@ -72,7 +81,6 @@ namespace k::data
 	class Array;
 	class Object;
 	class Function;
-	class Iterator;
 	class Userdata;
 
 	class Value
@@ -88,7 +96,6 @@ namespace k::data
 			Array* array;
 			Object* object;
 			Function* function;
-			Iterator* iterator;
 			Userdata* userdata;
 
 			mem::MemoryBlock* _block;
@@ -132,7 +139,6 @@ namespace k::data
 		Value(Array* data);
 		Value(Object* data);
 		Value(Function* data);
-		Value(Iterator* data);
 		Value(Userdata* data);
 
 		
@@ -141,7 +147,6 @@ namespace k::data
 		inline Value(Array& data) : Value(&data) {}
 		inline Value(Object& data) : Value(&data) {}
 		inline Value(Function& data) : Value(&data) {}
-		inline Value(Iterator& data) : Value(&data) {}
 		inline Value(Userdata& data) : Value(&data) {}
 
 
@@ -236,19 +241,6 @@ namespace k::data
 		}
 		inline Value& operator= (Function& right) { return *this = &right; }
 
-		inline Value& operator= (Iterator* right)
-		{
-			if (!isScalarDataType(_type))
-				_data._block->dec_ref();
-
-			_type = right ? DataType::Iterator : DataType::Undefined;
-			_data.iterator = right;
-			if (right)
-				_data._block->inc_ref();
-			return *this;
-		}
-		inline Value& operator= (Iterator& right) { return *this = &right; }
-
 		inline Value& operator= (Userdata* right)
 		{
 			if (!isScalarDataType(_type))
@@ -313,11 +305,25 @@ namespace k::data
 		inline Function& function() { return *_data.function; }
 		inline const Function& function() const { return *_data.function; }
 
-		inline Iterator& iterator() { return *_data.iterator; }
-		inline const Iterator& iterator() const { return *_data.iterator; }
-
 		inline Userdata& userdata() { return *_data.userdata; }
 		inline const Userdata& userdata() const { return *_data.userdata; }
+
+		public:
+			static inline void swap(Value& left, Value& right)
+			{
+				DataType t_aux = left._type;
+				left._type = right._type;
+				right._type = t_aux;
+
+				decltype(left._data) d_aux = std::move(left._data);
+				left._data = std::move(right._data);
+				right._data = std::move(d_aux);
+			}
+
+		public:
+			Integer runtime_cast_integer(runtime::RuntimeState& state) const;
+			Real runtime_cast_real(runtime::RuntimeState& state) const;
+			Boolean runtime_cast_boolean(runtime::RuntimeState& state) const;
 	};
 
 	
@@ -499,8 +505,40 @@ namespace k::data
 		inline const_iterator cend() const { return _props.cend(); }
 	};
 
-	class Function : public mem::MemoryBlock {};
-	class Iterator : public mem::MemoryBlock {};
+	class Function : public mem::MemoryBlock
+	{
+	private:
+		std::string _name;
+		Callable* _callable;
+
+	public:
+		Function() = default;
+
+		Function(const Function&) = delete;
+		Function& operator= (const Function&) = default;
+
+	public:
+		Function(const Chunk& chunk, Size upsCount, const std::string& name = "");
+		~Function();
+
+	public:
+		inline const std::string& name() const { return _name; }
+		inline Callable& callable() { return *_callable; }
+
+		inline Value call(runtime::RuntimeState& state, const Value* args, Size argsCount)
+		{
+			return runtime::execute(state, *_callable, args, argsCount);
+		}
+
+	public:
+		void call(runtime::RuntimeState& state, std::initializer_list<Value> args);
+		void call(runtime::RuntimeState& state, const std::vector<Value>& args);
+
+		void invoke(runtime::RuntimeState& state, const Value& self, const Value* args, Size argsCount);
+		void invoke(runtime::RuntimeState& state, const Value& self, std::initializer_list<Value> args);
+		void invoke(runtime::RuntimeState& state, const Value& self, const std::vector<Value>& args);
+	};
+
 	class Userdata : public mem::MemoryBlock {};
 }
 
@@ -532,12 +570,6 @@ namespace k::data
 			_data.function->inc_ref();
 	}
 
-	inline Value::Value(Iterator* data) : _type{ data ? DataType::Iterator : DataType::Undefined }, _data{ .iterator = data }
-	{
-		if (_data.iterator)
-			_data.iterator->inc_ref();
-	}
-
 	inline Value::Value(Userdata* data) : _type{ data ? DataType::Userdata : DataType::Undefined }, _data{ .userdata = data }
 	{
 		if (_data.userdata)
@@ -567,29 +599,43 @@ namespace k::mem
 		Heap& operator= (const Heap&) = delete;
 
 	public:
-		MemoryBlock* allocate(Size size);
 		void deallocate(MemoryBlock* block);
 
 	private:
 		template<std::derived_from<MemoryBlock> _Ty, typename... _Args>
-		_Ty* create_and_construct(_Args&&... args)
+		_Ty* allocate(_Args&&... args)
 		{
-			_Ty* data = reinterpret_cast<_Ty*>(allocate(sizeof(_Ty)));
-			return &utils::construct<_Ty>(*data, std::forward<_Args>(args)...);
+			_Ty* block = utils::malloc<_Ty>(std::max(sizeof(_Ty), sizeof(MemoryBlock)));
+			utils::construct<_Ty>(*block, std::forward<_Args>(args)...);
+
+			block->_owner = this;
+			block->_next = nullptr;
+			block->_prev = _back;
+			block->_refs = 0;
+
+			if (!_front)
+				_front = _back = block;
+			else
+			{
+				_back->_next = block;
+				_back = block;
+			}
+
+			return block;
 		}
 
 	public:
-		inline data::Value create_string() { return create_and_construct<data::String>(); }
-		data::Value create_string(const char* str) { return create_and_construct<data::String>(str); }
-		data::Value create_string(const std::string& str) { return create_and_construct<data::String>(str); }
+		inline data::Value create_string() { return allocate<data::String>(); }
+		data::Value create_string(const char* str) { return allocate<data::String>(str); }
+		data::Value create_string(const std::string& str) { return allocate<data::String>(str); }
 
-		inline data::Value create_array() { return create_and_construct<data::Array>(); }
-		inline data::Value create_array(Size len) { return create_and_construct<data::Array>(len); }
-		inline data::Value create_array(Size len, const data::Value& default_value) { return create_and_construct<data::Array>(len, default_value); }
-		inline data::Value create_array(data::Value* array, Size len) { return create_and_construct<data::Array>(array, len); }
-		inline data::Value create_array(const std::vector<data::Value>& vector) { return create_and_construct<data::Array>(vector); }
-		inline data::Value create_array(std::vector<data::Value>&& vector) { return create_and_construct<data::Array>(std::move(vector)); }
-		inline data::Value create_array(std::initializer_list<data::Value> args) { return create_and_construct<data::Array>(args); }
+		inline data::Value create_array() { return allocate<data::Array>(); }
+		inline data::Value create_array(Size len) { return allocate<data::Array>(len); }
+		inline data::Value create_array(Size len, const data::Value& default_value) { return allocate<data::Array>(len, default_value); }
+		inline data::Value create_array(data::Value* array, Size len) { return allocate<data::Array>(array, len); }
+		inline data::Value create_array(const std::vector<data::Value>& vector) { return allocate<data::Array>(vector); }
+		inline data::Value create_array(std::vector<data::Value>&& vector) { return allocate<data::Array>(std::move(vector)); }
+		inline data::Value create_array(std::initializer_list<data::Value> args) { return allocate<data::Array>(args); }
 	};
 
 

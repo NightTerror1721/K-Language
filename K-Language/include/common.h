@@ -61,9 +61,9 @@ namespace k::utils
 	}
 
 	template<typename _Ty>
-	inline _Ty move(_Ty& dst, _Ty&& src)
+	inline _Ty& move(_Ty& dst, _Ty&& src)
 	{
-		return construct(std::move(src));
+		return construct(dst, std::move(src));
 	}
 
 

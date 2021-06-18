@@ -1,4 +1,6 @@
 #include "data.h"
+#include "callable.h"
+#include "runtime.h"
 
 namespace k::data
 {
@@ -6,6 +8,7 @@ namespace k::data
 
 
 	Array::Array(Value* array, Size len) :
+		MemoryBlock(),
 		_array(len)
 	{
 		for (Value* ptr = _array.data(); len > 0; --len, ++ptr, ++array)
@@ -13,38 +16,46 @@ namespace k::data
 	}
 
 	Array::Array(const std::vector<Value>& vector) :
+		MemoryBlock(),
 		_array(vector)
 	{}
 
 	Array::Array(std::vector<Value>&& vector) noexcept :
+		MemoryBlock(),
 		_array(std::move(vector))
 	{}
 
 	Array::Array(std::initializer_list<Value> args) :
+		MemoryBlock(),
 		_array(args)
 	{}
 
 	Array::Array(Size length, const Value& default_value) :
+		MemoryBlock(),
 		_array(length, default_value)
 	{}
 
 	Array::Array(Size length) :
+		MemoryBlock(),
 		_array(length)
 	{}
 
 
 
 	Object::Object(const Value& value, ConstructType type) :
+		MemoryBlock(),
 		_props(),
 		_parent(type == ConstructType::Parent ? value : nullptr),
 		_class(type == ConstructType::Class ? value : nullptr)
 	{}
 	Object::Object(const std::unordered_map<std::string, Property>& props, const Value& value, ConstructType type) :
+		MemoryBlock(),
 		_props(props),
 		_parent(type == ConstructType::Parent ? value : nullptr),
 		_class(type == ConstructType::Class ? value : nullptr)
 	{}
 	Object::Object(const std::unordered_map<std::string, Property>& props) :
+		MemoryBlock(),
 		_props(props),
 		_parent(),
 		_class()
@@ -75,6 +86,31 @@ namespace k::data
 
 		return result.second;
 	}
+
+
+
+	Function::Function(const Chunk& chunk, Size upsCount, const std::string& name) :
+		MemoryBlock(),
+		_name(name),
+		_callable(new Callable(chunk, upsCount))
+	{}
+
+	Function::~Function()
+	{
+		if (_callable)
+			delete _callable;
+	}
+
+	void Function::call(runtime::RuntimeState& state, const Value* args, Size argsCount)
+	{
+		runtime::execute(state, *_callable, args, argsCount);
+	}
+	/*void Function::call(runtime::RuntimeState& state, std::initializer_list<Value> args);
+	void Function::call(runtime::RuntimeState& state, const std::vector<Value>& args);
+
+	void Function::invoke(runtime::RuntimeState& state, const Value& self, const Value* args, Size argsCount);
+	void Function::invoke(runtime::RuntimeState& state, const Value& self, std::initializer_list<Value> args);
+	void Function::invoke(runtime::RuntimeState& state, const Value& self, const std::vector<Value>& args);*/
 }
 
 namespace k::mem
@@ -96,25 +132,6 @@ namespace k::mem
 		_front = _back = nullptr;
 	}
 
-	MemoryBlock* Heap::allocate(Size size)
-	{
-		MemoryBlock* block = utils::malloc<MemoryBlock>(std::max(size, sizeof(MemoryBlock)));
-		block->_owner = this;
-		block->_next = nullptr;
-		block->_prev = _back;
-		block->_refs = 0;
-
-		if (!_front)
-			_front = _back = block;
-		else
-		{
-			_back->_next = block;
-			_back = block;
-		}
-
-		return block;
-	}
-
 	void Heap::deallocate(MemoryBlock* block)
 	{
 		if (block->_owner == this)
@@ -133,4 +150,30 @@ namespace k::mem
 			utils::free(block);
 		}
 	}
+}
+
+namespace k::data
+{
+	Integer Value::runtime_cast_integer(runtime::RuntimeState& state) const
+	{
+		switch (_type)
+		{
+			case DataType::Undefined: return 0;
+			case DataType::Integer: return _data.integer;
+			case DataType::Real: return static_cast<Integer>(_data.real);
+			case DataType::Boolean: return static_cast<Integer>(_data.boolean);
+		}
+
+		return 0;
+	}
+
+	/*Real Value::runtime_cast_real(runtime::RuntimeState& state) const
+	{
+
+	}
+
+	Boolean Value::runtime_cast_boolean(runtime::RuntimeState& state) const
+	{
+
+	}*/
 }

@@ -149,12 +149,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\callable.cpp" />
+    <ClCompile Include="src\chunk.cpp" />
     <ClCompile Include="src\data.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\runtime.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\callable.h" />
+    <ClInclude Include="include\chunk.h" />
     <ClInclude Include="include\common.h" />
     <ClInclude Include="include\data.h" />
+    <ClInclude Include="include\instructions.h" />
+    <ClInclude Include="include\opcodes.h" />
+    <ClInclude Include="include\runtime.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
